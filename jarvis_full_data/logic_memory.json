@@ -1,0 +1,107 @@
+[
+  {
+    "time": "2025-11-10T19:36:40.776354",
+    "input": "wassup?",
+    "response": "Próbáld meg másképp megfogalmazni."
+  },
+  {
+    "time": "2025-11-10T19:52:52.517973",
+    "input": "hogy smint?",
+    "response": "\"Hogyan szállítsunk?\"",
+    "sentiment": {
+      "label": "NEGATIVE",
+      "score": 0.9930887818336487
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-10T19:57:02.660392",
+    "input": "hogy vagy?",
+    "response": "\"Köszönjük!\"",
+    "sentiment": {
+      "label": "NEGATIVE",
+      "score": 0.9973874688148499
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-10T19:59:15.257551",
+    "input": "hi",
+    "response": "Szia! Én vagyok Jarvis. Mi a neved?",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9983267188072205
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-10T19:59:27.548492",
+    "input": "levi vagyok, hogy vagy ma?",
+    "response": "Örülök a találkozásnak, ma! Hogy segíthetek ma?",
+    "sentiment": {
+      "label": "NEGATIVE",
+      "score": 0.9748775959014893
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-10T20:00:10.637224",
+    "input": "én is, tudsz mondani 10 állatfalyt?",
+    "response": "Úgy tűnik, valami nem tetszik. Mesélj róla, hátha tudok segíteni!",
+    "sentiment": {
+      "label": "NEGATIVE",
+      "score": 0.9913749098777771
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-12T18:24:16.555397",
+    "input": "dog",
+    "response": "Örülök, hogy jó a hangulatod! 😊 Miben segíthetek ma?",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9778261184692383
+    },
+    "ai_used": true
+  },
+  {
+    "time": "2025-11-13T17:28:27.775778",
+    "input": "Kutya",
+    "response": "Ollama error: model 'llama3.2' not found (status code: 404)",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9987254738807678
+    },
+    "ai_type": "ollama"
+  },
+  {
+    "time": "2025-11-13T17:30:05.292695",
+    "input": "Kutya",
+    "response": "Ollama error: model requires more system memory than is currently available unable to load full model on GPU (status code: 500)",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9987254738807678
+    },
+    "ai_type": "ollama"
+  },
+  {
+    "time": "2025-11-13T17:38:24.983799",
+    "input": "hi",
+    "response": "Hi there! I'm JARVIS, an AI created for a personal computer system. How can I assist you today?",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9983267188072205
+    },
+    "ai_type": "ollama"
+  },
+  {
+    "time": "2025-11-13T18:31:28.832752",
+    "input": "hi",
+    "response": "Csi?\n\nHello too!\n\nKutya!",
+    "sentiment": {
+      "label": "POSITIVE",
+      "score": 0.9983267188072205
+    },
+    "ai_type": "ollama"
+  }
+]

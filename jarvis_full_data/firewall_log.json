@@ -1,0 +1,107 @@
+[
+  {
+    "timestamp": "2025-11-10 20:35:12",
+    "action": "DENIED",
+    "ip": "192.168.0.101",
+    "port": null,
+    "message": "IP nem engedélyezett"
+  },
+  {
+    "timestamp": "2025-11-10 20:35:56",
+    "action": "ALLOWED",
+    "ip": "192.168.0.101",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-10 20:52:37",
+    "action": "ALLOWED",
+    "ip": "192.168.0.101",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-10 20:58:59",
+    "action": "ALLOWED",
+    "ip": "192.168.0.101",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-12 19:20:45",
+    "action": "DENIED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "IP nem engedélyezett"
+  },
+  {
+    "timestamp": "2025-11-12 19:23:18",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-12 19:34:42",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-12 19:41:11",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-12 20:10:21",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-12 20:12:23",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-13 18:26:43",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-13 18:29:57",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-13 18:38:07",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-13 18:41:34",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  },
+  {
+    "timestamp": "2025-11-13 19:30:54",
+    "action": "ALLOWED",
+    "ip": "192.168.0.100",
+    "port": null,
+    "message": "Hozzáférés engedélyezve"
+  }
+]
