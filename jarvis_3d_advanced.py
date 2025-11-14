@@ -34,63 +34,127 @@ RENDERS_DIR.mkdir(exist_ok=True)
 MATERIAL_DATABASE = {
     "Titanium": {
         "metallic": 1.0,
-        "roughness": 0.3,
-        "color": [0.7, 0.7, 0.75],
-        "reflectivity": 0.8,
-        "description": "Strong, lightweight metal"
+        "roughness": 0.35,
+        "color": [0.76, 0.76, 0.78],
+        "reflectivity": 0.7,
+        "specular": 0.5,
+        "description": "Strong, lightweight metal with subtle blue tint."
     },
     "Gold": {
         "metallic": 1.0,
-        "roughness": 0.1,
-        "color": [1.0, 0.84, 0.0],
+        "roughness": 0.15,
+        "color": [1.0, 0.85, 0.0],
         "reflectivity": 0.95,
-        "description": "Precious yellow metal"
+        "specular": 0.9,
+        "description": "Highly reflective yellow noble metal."
+    },
+    "Silver": {
+        "metallic": 1.0,
+        "roughness": 0.1,
+        "color": [0.97, 0.97, 0.97],
+        "reflectivity": 0.98,
+        "description": "Extremely reflective metal used in mirrors."
+    },
+    "Aluminum": {
+        "metallic": 1.0,
+        "roughness": 0.4,
+        "color": [0.85, 0.85, 0.90],
+        "reflectivity": 0.75,
+        "description": "Bright, lightweight metal with strong reflection."
     },
     "Steel": {
         "metallic": 1.0,
-        "roughness": 0.4,
+        "roughness": 0.5,
         "color": [0.8, 0.8, 0.8],
-        "reflectivity": 0.7,
-        "description": "Durable iron alloy"
+        "reflectivity": 0.65,
+        "description": "Durable industrial metal alloy."
     },
     "Copper": {
         "metallic": 1.0,
-        "roughness": 0.2,
+        "roughness": 0.25,
         "color": [0.95, 0.64, 0.54],
         "reflectivity": 0.85,
-        "description": "Reddish conductive metal"
+        "description": "Reddish conductive metal."
+    },
+    "Brass": {
+        "metallic": 1.0,
+        "roughness": 0.35,
+        "color": [0.89, 0.76, 0.30],
+        "reflectivity": 0.85,
+        "description": "Yellowish metal alloy of copper and zinc."
     },
     "Glass": {
         "metallic": 0.0,
-        "roughness": 0.0,
-        "color": [0.9, 0.9, 1.0],
-        "reflectivity": 0.3,
-        "transmission": 0.9,
-        "description": "Transparent material"
+        "roughness": 0.02,
+        "color": [0.95, 0.95, 1.0],
+        "reflectivity": 0.25,
+        "transmission": 0.95,
+        "ior": 1.45,
+        "description": "Smooth, transparent material."
+    },
+    "Acrylic": {
+        "metallic": 0.0,
+        "roughness": 0.15,
+        "color": [1.0, 1.0, 1.0],
+        "reflectivity": 0.2,
+        "transmission": 0.85,
+        "ior": 1.49,
+        "description": "Clear plastic with slight blur."
     },
     "Plastic": {
         "metallic": 0.0,
-        "roughness": 0.6,
-        "color": [0.2, 0.5, 0.8],
-        "reflectivity": 0.2,
-        "description": "Synthetic polymer"
+        "roughness": 0.65,
+        "color": [0.2, 0.45, 0.8],
+        "reflectivity": 0.15,
+        "description": "Typical colored polymer surface."
+    },
+    "Matte Plastic": {
+        "metallic": 0.0,
+        "roughness": 0.8,
+        "color": [0.25, 0.25, 0.25],
+        "reflectivity": 0.1,
+        "description": "Non-reflective rough plastic."
+    },
+    "Rubber": {
+        "metallic": 0.0,
+        "roughness": 0.9,
+        "color": [0.1, 0.1, 0.1],
+        "reflectivity": 0.05,
+        "description": "Dark elastic non-reflective material."
     },
     "Wood": {
         "metallic": 0.0,
-        "roughness": 0.8,
-        "color": [0.6, 0.4, 0.2],
+        "roughness": 0.85,
+        "color": [0.55, 0.35, 0.2],
         "reflectivity": 0.1,
-        "description": "Natural organic material"
+        "description": "Natural material with warm tones."
+    },
+    "Marble": {
+        "metallic": 0.0,
+        "roughness": 0.3,
+        "color": [0.9, 0.9, 0.95],
+        "reflectivity": 0.25,
+        "description": "Stone with subtle reflection."
     },
     "Diamond": {
         "metallic": 0.0,
         "roughness": 0.0,
         "color": [1.0, 1.0, 1.0],
         "reflectivity": 0.95,
-        "transmission": 0.5,
-        "description": "Crystal clear gemstone"
+        "transmission": 0.9,
+        "ior": 2.417,
+        "description": "Highly refractive gemstone."
+    },
+    "Emissive Neon Blue": {
+        "metallic": 0.0,
+        "roughness": 0.1,
+        "color": [0.2, 0.6, 1.0],
+        "emission": [0.2, 0.6, 1.0],
+        "emission_strength": 4.0,
+        "description": "Glowing neon-like material."
     }
 }
+
 
 # ------------------ 3D Mesh Generation ------------------
 def create_cube_mesh(size=1.0):

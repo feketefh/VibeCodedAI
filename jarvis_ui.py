@@ -19,7 +19,8 @@ except Exception as e:
 # Voice Recognition - Import from module
 try:
     from jarvis_voice_recognition import (
-        listen_and_transcribe,
+        record_audio,
+        transcribe_audio,
         VOICE_AVAILABLE as VOICE_RECOGNITION_AVAILABLE
     )
     print("✓ Voice recognition module loaded")
@@ -85,6 +86,7 @@ def save_settings(settings):
     except Exception as e:
         print(f"Settings save error: {e}")
 
+
 # ------------------ Jarvis GUI ------------------
 class JarvisGUI:
     def __init__(self):
@@ -92,6 +94,7 @@ class JarvisGUI:
         self.root.title("JARVIS AI Assistant")
         self.root.geometry("900x700")
         self.root.configure(bg="#1a1a1a")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # Initialize TTS in main thread
         init_tts()
@@ -104,6 +107,7 @@ class JarvisGUI:
         
         # Streaming state
         self.current_stream_message = ""
+        self.stream_sender = None  # Track who is sending the stream
         self.stream_queue = queue.Queue()
         
         # TTS queue for thread-safe TTS
@@ -297,6 +301,12 @@ class JarvisGUI:
                 elif message == "__END__":
                     self.end_stream_message()
                 else:
+                    # Add [JARVIS]: prefix before first content
+                    if self.current_stream_message == "" and hasattr(self, 'stream_sender'):
+                        self.chat_display.config(state=tk.NORMAL)
+                        self.chat_display.insert(tk.END, f"[{self.stream_sender}]: ", "streaming")
+                        self.chat_display.config(state=tk.DISABLED)
+                    
                     self.current_stream_message += message
                     self.add_message("", message, streaming=True)
         except queue.Empty:
@@ -359,37 +369,110 @@ class JarvisGUI:
             self.add_message("SYSTEM", "Voice recognition not available. Install: pip install openai-whisper pyaudio")
             return
         
-        if self.is_recording:
-            # Should not happen, recording is done in separate thread
+        if not self.is_recording:
+            # Start recording
+            self.is_recording = True
+            self.record_button.config(bg="#ff0000", text="⏹")
+            self.status_label.config(text="🎤 Recording... (Click to stop)", fg="#ff0000")
+            
+            # Start recording in background
+            threading.Thread(target=self.start_recording, daemon=True).start()
+        else:
+            # Stop recording
+            self.is_recording = False
+            self.record_button.config(bg="#ffaa00", text="⏳")
+            self.status_label.config(text="🔄 Processing...", fg="#ffaa00")
+    
+    def start_recording(self):
+        """Start continuous recording until stopped"""
+        if not VOICE_RECOGNITION_AVAILABLE:
             return
         
-        self.is_recording = True
-        self.record_button.config(bg="#00aa00", text="⏹")
-        self.status_label.config(text="🎤 Recording...", fg="#ff0000")
-        
-        # Start recording in background
-        threading.Thread(target=self.record_and_transcribe, daemon=True).start()
-    
-    def record_and_transcribe(self):
-        """Record audio and transcribe it"""
         try:
-            # Use the voice recognition module
-            text = listen_and_transcribe(
-                duration=5,
-                language="hu",  # Hungarian language
-                model_name="base"  # Can be changed to: tiny, small, medium, large
+            import pyaudio
+            import wave
+            
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+            CHANNELS = 1
+            RATE = 16000
+            
+            audio = pyaudio.PyAudio()
+            
+            # Open stream
+            stream = audio.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                input=True,
+                frames_per_buffer=CHUNK
+            )
+            
+            print("🎤 Recording started...")
+            frames = []
+            
+            # Record while is_recording is True
+            while self.is_recording:
+                try:
+                    data = stream.read(CHUNK, exception_on_overflow=False)
+                    frames.append(data)
+                except Exception as e:
+                    print(f"Read error: {e}")
+                    break
+            
+            print("✓ Recording stopped")
+            
+            # Clean up
+            stream.stop_stream()
+            stream.close()
+            audio.terminate()
+            
+            # Save to file
+            from jarvis_voice_recognition import TEMP_AUDIO_FILE
+            with wave.open(str(TEMP_AUDIO_FILE), "wb") as wf:
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(audio.get_sample_size(FORMAT))
+                wf.setframerate(RATE)
+                wf.writeframes(b''.join(frames))
+            
+            print(f"✓ Audio saved: {TEMP_AUDIO_FILE}")
+            
+            # Now transcribe the recording
+            self.transcribe_recording()
+            
+        except Exception as e:
+            print(f"❌ Recording error: {e}")
+            self.root.after(0, lambda: self.status_label.config(text="❌ Recording failed", fg="#ff0000"))
+            self.root.after(0, lambda: self.record_button.config(bg="#aa0000", text="🎤"))
+            self.is_recording = False
+    
+    def transcribe_recording(self):
+        """Transcribe the recorded audio"""
+        try:
+            from jarvis_voice_recognition import transcribe_audio, TEMP_AUDIO_FILE
+            
+            print("🔄 Transcribing audio...")
+            
+            # Transcribe
+            text = transcribe_audio(
+                audio_path=TEMP_AUDIO_FILE,
+                language="en",
+                model_name="large-v3-turbo"
             )
             
             if text:
-                # Insert transcribed text into input field
+                # Insert transcribed text into input field ONLY
                 self.root.after(0, lambda: self.input_entry.delete(0, tk.END))
                 self.root.after(0, lambda: self.input_entry.insert(0, text))
-                self.root.after(0, lambda: self.add_message("TRANSCRIBED", text))
+                self.root.after(0, lambda: self.input_entry.focus_set())
+                print(f"✓ Transcribed: {text}")
+                
             else:
-                self.root.after(0, lambda: self.add_message("SYSTEM", "Failed to transcribe audio"))
+                self.root.after(0, lambda: self.status_label.config(text="❌ Transcription failed", fg="#ff0000"))
         
         except Exception as e:
-            self.root.after(0, lambda: self.add_message("SYSTEM", f"Recording error: {e}"))
+            print(f"❌ Transcription error: {e}")
+            self.root.after(0, lambda: self.status_label.config(text="❌ Transcription failed", fg="#ff0000"))
         
         finally:
             # Reset recording state
@@ -482,15 +565,8 @@ class JarvisGUI:
         """Start GUI main loop"""
         self.root.mainloop()
 
-# ------------------ Test ------------------
-if __name__ == "__main__":
-    # Initialize TTS first
-    init_tts()
-    
-    # Welcome message
-    if TTS_AVAILABLE:
-        speak("JARVIS inicializálása...")
-    
-    # Start GUI
-    gui = JarvisGUI()
-    gui.run()
+    def on_close(self):
+        try:
+            self.root.destroy()
+        except:
+            pass

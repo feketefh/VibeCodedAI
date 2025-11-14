@@ -170,35 +170,6 @@ def transcribe_audio(audio_path, language="hu", model_name="base"):
         print(f"❌ Transcription error: {e}")
         return None
 
-# ------------------ Combined Function ------------------
-def listen_and_transcribe(duration=5, language="hu", model_name="base"):
-    """
-    Record audio from microphone and transcribe it
-    
-    Args:
-        duration: Recording duration in seconds
-        language: Language code ("hu" for Hungarian, None for auto-detect)
-        model_name: Whisper model size
-    
-    Returns:
-        Transcribed text or None if failed
-    """
-    print("\n" + "="*60)
-    print("🎤 JARVIS Voice Recognition")
-    print("="*60)
-    
-    # Record audio
-    audio_path = record_audio(duration=duration)
-    if not audio_path:
-        return None
-    
-    # Transcribe audio
-    text = transcribe_audio(audio_path, language=language, model_name=model_name)
-    
-    print("="*60 + "\n")
-    
-    return text
-
 # ------------------ List Available Devices ------------------
 def list_audio_devices():
     """List all available audio input devices"""
@@ -232,25 +203,6 @@ def list_audio_devices():
     except Exception as e:
         print(f"❌ Error listing devices: {e}")
 
-# ------------------ Test Audio Recording ------------------
-def test_microphone(duration=3):
-    """
-    Test microphone by recording and playing back
-    
-    Args:
-        duration: Test duration in seconds
-    """
-    print("\n🧪 Testing microphone...")
-    audio_path = record_audio(duration=duration)
-    
-    if audio_path:
-        print(f"✓ Microphone test successful!")
-        print(f"  Audio saved to: {audio_path}")
-        print(f"  Duration: {duration} seconds")
-        return True
-    else:
-        print("❌ Microphone test failed")
-        return False
 
 # ------------------ Get Available Models ------------------
 def get_available_models():
@@ -282,87 +234,3 @@ def print_model_info():
     print("Recommendation: 'base' for good balance, 'small' for better quality")
     print("="*60 + "\n")
 
-# ------------------ Status Check ------------------
-def get_voice_status():
-    """Get current voice recognition status"""
-    return {
-        "available": VOICE_AVAILABLE,
-        "whisper_loaded": whisper_model is not None,
-        "current_model": CURRENT_MODEL if whisper_model else None,
-        "temp_audio_file": str(TEMP_AUDIO_FILE)
-    }
-
-# ------------------ Test/CLI Mode ------------------
-if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("JARVIS Voice Recognition Module - Test Mode")
-    print("="*60 + "\n")
-    
-    # Check availability
-    status = get_voice_status()
-    print("Status:")
-    print(f"  {'✓' if status['available'] else '✗'} Voice recognition available")
-    
-    if not status['available']:
-        print("\n❌ Voice recognition not available!")
-        print("Install with:")
-        print("  pip install openai-whisper pyaudio")
-        exit(1)
-    
-    print()
-    
-    # Show available models
-    print_model_info()
-    
-    # List audio devices
-    list_audio_devices()
-    
-    # Test microphone
-    print("Testing microphone...")
-    if not test_microphone(duration=2):
-        print("\n⚠ Microphone test failed, but continuing...")
-    
-    print()
-    
-    # Interactive mode
-    while True:
-        print("\nOptions:")
-        print("  [1] Record and transcribe (Hungarian)")
-        print("  [2] Record and transcribe (Auto-detect)")
-        print("  [3] Change Whisper model")
-        print("  [4] Test microphone")
-        print("  [5] List audio devices")
-        print("  [0] Exit")
-        
-        choice = input("\nSelect option: ").strip()
-        
-        if choice == "1":
-            text = listen_and_transcribe(duration=5, language="hu", model_name=CURRENT_MODEL)
-            if text:
-                print(f"\n✅ Result: {text}")
-        
-        elif choice == "2":
-            text = listen_and_transcribe(duration=5, language=None, model_name=CURRENT_MODEL)
-            if text:
-                print(f"\n✅ Result: {text}")
-        
-        elif choice == "3":
-            print("\nAvailable models: tiny, base, small, medium, large, large-v3-turbo")
-            model = input(f"Enter model name (current: {CURRENT_MODEL}): ").strip()
-            if model:
-                load_whisper_model(model)
-        
-        elif choice == "4":
-            duration = input("Duration in seconds (default: 3): ").strip()
-            duration = int(duration) if duration.isdigit() else 3
-            test_microphone(duration)
-        
-        elif choice == "5":
-            list_audio_devices()
-        
-        elif choice == "0":
-            print("\n👋 Goodbye!")
-            break
-        
-        else:
-            print("Invalid option")
