@@ -6,6 +6,8 @@ import threading
 YOLO_AVAILABLE = False
 try:
     from ultralytics import YOLO
+    from ultralytics.utils import LOGGER
+    LOGGER.setLevel("ERROR")
     YOLO_AVAILABLE = True
 except Exception:
     print("YOLO import hiba! Objektumfelismerés offline nem működik.")

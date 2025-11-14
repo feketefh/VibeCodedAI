@@ -65,18 +65,23 @@ SETTINGS_FILE = SETTINGS_DIR / "ui_settings.json"
 
 def load_settings():
     """Load UI settings from JSON file"""
+    default_config = {
+        "tts_enabled": TTS_AVAILABLE,
+        "stream_enabled": False
+    }
+
     try:
         if SETTINGS_FILE.exists():
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
+        else:
+            with open(SETTINGS_FILE, "w") as f:
+                json.dump(default_config, f, indent=4)
     except Exception as e:
         print(f"Settings load error: {e}")
     
     # Default settings
-    return {
-        "tts_enabled": TTS_AVAILABLE,
-        "stream_enabled": True
-    }
+    return default_config
 
 def save_settings(settings):
     """Save UI settings to JSON file"""
@@ -115,7 +120,7 @@ class JarvisGUI:
         
         # Plain Python settings (not Tkinter variables)
         self._tts_enabled = self.settings.get("tts_enabled", TTS_AVAILABLE)
-        self._stream_enabled = self.settings.get("stream_enabled", True)
+        self._stream_enabled = self.settings.get("stream_enabled", False)
         
         # Title
         self.title_label = tk.Label(
@@ -514,7 +519,7 @@ class JarvisGUI:
             tts_enabled: TTS setting (passed as value, not variable)
             stream_enabled: Streaming setting (passed as value, not variable)
         """
-        from jarvis_logic import decide_action
+        from jarvis_logic import askAI
         import time
         
         try:
@@ -522,25 +527,25 @@ class JarvisGUI:
             
             # Use streaming if enabled
             if stream_enabled:
-                # Signal start of stream
-                self.stream_queue.put("__START__")
-                
-                # Capture streaming response with delay
-                def capture_stream(text):
-                    nonlocal full_response
-                    full_response += text
-                    self.stream_callback(text)
-                    # Add small delay for smooth streaming effect
-                    time.sleep(0.05)  # 50ms delay between words
+                ## Signal start of stream
+                #self.stream_queue.put("__START__")
+                #
+                ## Capture streaming response with delay
+                #def capture_stream(text):
+                #    nonlocal full_response
+                #    full_response += text
+                #    self.stream_callback(text)
+                #    # Add small delay for smooth streaming effect
+                #    time.sleep(0.05)  # 50ms delay between words
                 
                 # Get response with streaming
-                response = decide_action(user_input, stream_callback=capture_stream)
+                response = askAI(user_input)
                 
                 # Signal end of stream
-                self.stream_queue.put("__END__")
+                #self.stream_queue.put("__END__")
             else:
                 # Get response without streaming
-                response = decide_action(user_input)
+                response = askAI(user_input)
                 full_response = response
                 self.root.after(0, lambda r=response: self.add_message("JARVIS", r))
             

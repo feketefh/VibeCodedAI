@@ -175,8 +175,33 @@ def web_search(query, retries=MAX_SEARCH_RETRIES):
     print("❌ No useful results found after retries.")
     return "No relevant information found online."
 
-# ------------------ Ollama Chat Function ------------------
-def chat_with_ollama(user_input, history, config, stream_callback=None):
+
+# ------------------ Fallback Decision Making ------------------
+def fallback_decision(input_text):
+    """Fallback logic when Ollama is not available"""
+    input_lower = input_text.lower()
+    
+    # Basic responses
+    if any(word in input_lower for word in ["hello", "szia", "hi", "helló", "üdv"]):
+        return "Szia! Én vagyok JARVIS. Miben segíthetek?"
+    
+    elif "idő" in input_lower or "óra" in input_lower:
+        return f"A pontos idő: {datetime.now().strftime('%H:%M:%S')}"
+    
+    elif "dátum" in input_lower or "nap" in input_lower:
+        return f"A mai dátum: {datetime.now().strftime('%Y-%m-%d')}"
+    
+    elif "ki vagy" in input_lower or "név" in input_lower:
+        return "Én vagyok JARVIS, egy mesterséges intelligencia asszisztens."
+    
+    elif any(word in input_lower for word in ["3d", "modell", "anyag"]):
+        return "Elindítom a 3D anyag generálást. Milyen anyagot szeretnél?"
+
+    
+    return "Sajnálom, jelenleg korlátozott módban működöm. Telepítsd az Ollama-t a teljes funkcionalitáshoz: https://ollama.ai"
+
+# ------------------ Ask AI function ------------------
+def askAI(user_input, stream_callback=False):
     """
     Chat with Ollama model with optional streaming support
     
@@ -189,8 +214,14 @@ def chat_with_ollama(user_input, history, config, stream_callback=None):
     Returns:
         response_text: Complete response from the model
     """
+    config = load_config()
+    history = load_history()
+    context = load_context()
+        
     if not OLLAMA_AVAILABLE:
-        return "Ollama not available. Install from: https://ollama.ai"
+        response = fallback_decision(user_input)
+        history.append({"role": "user", "content": user_input})
+        history.append({"role": "assistant", "content": response})
     
     # Add user message to history
     history.append({"role": "user", "content": user_input})
@@ -256,7 +287,12 @@ def chat_with_ollama(user_input, history, config, stream_callback=None):
         
         # Add final response to history
         history.append({"role": "assistant", "content": response_text})
-        
+        save_history(history)
+
+        # Update context
+        context["last_topics"].append(user_input[:50])
+        context["last_topics"] = context["last_topics"][-5:]
+        save_context(context)
         return response_text
         
     except Exception as e:
@@ -264,65 +300,6 @@ def chat_with_ollama(user_input, history, config, stream_callback=None):
         print(f"❌ {error_msg}")
         return error_msg
 
-# ------------------ Fallback Decision Making ------------------
-def fallback_decision(input_text):
-    """Fallback logic when Ollama is not available"""
-    input_lower = input_text.lower()
-    
-    # Basic responses
-    if any(word in input_lower for word in ["hello", "szia", "hi", "helló", "üdv"]):
-        return "Szia! Én vagyok JARVIS. Miben segíthetek?"
-    
-    elif "idő" in input_lower or "óra" in input_lower:
-        return f"A pontos idő: {datetime.now().strftime('%H:%M:%S')}"
-    
-    elif "dátum" in input_lower or "nap" in input_lower:
-        return f"A mai dátum: {datetime.now().strftime('%Y-%m-%d')}"
-    
-    elif "ki vagy" in input_lower or "név" in input_lower:
-        return "Én vagyok JARVIS, egy mesterséges intelligencia asszisztens."
-    
-    elif any(word in input_lower for word in ["3d", "modell", "anyag"]):
-        return "Elindítom a 3D anyag generálást. Milyen anyagot szeretnél?"
-
-    
-    return "Sajnálom, jelenleg korlátozott módban működöm. Telepítsd az Ollama-t a teljes funkcionalitáshoz: https://ollama.ai"
-
-# ------------------ Main Decision Function ------------------
-def decide_action(input_text, stream_callback=None):
-    """
-    Main decision making function with Ollama + streaming + web search
-    
-    Args:
-        input_text: User input
-        stream_callback: Optional callback for streaming responses
-    
-    Returns:
-        response: AI response
-    """
-    # Load config and history
-    config = load_config()
-    history = load_history()
-    context = load_context()
-    
-    # Use Ollama if available
-    if OLLAMA_AVAILABLE:
-        response = chat_with_ollama(input_text, history, config, stream_callback)
-    else:
-        response = fallback_decision(input_text)
-        history.append({"role": "user", "content": input_text})
-        history.append({"role": "assistant", "content": response})
-    
-    # Save history
-    save_history(history)
-    
-    # Update context
-    context["last_topics"].append(input_text[:50])
-    context["last_topics"] = context["last_topics"][-5:]
-    save_context(context)
-
-    
-    return response
 
 # ------------------ Memory Logging ------------------
 def log_interaction(input_text, response):
@@ -445,7 +422,7 @@ if __name__ == "__main__":
             def print_stream(text):
                 print(text, end="", flush=True)
             
-            response = decide_action(user_input, stream_callback=print_stream)
+            response = askAI(user_input, stream_callback=print_stream)
             print("\n")
             
         except KeyboardInterrupt:
