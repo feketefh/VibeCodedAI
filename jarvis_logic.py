@@ -28,23 +28,6 @@ except Exception as e:
     print(f"⚠ Web search not available: {e}")
     print("Install with: pip install duckduckgo-search")
 
-# ------------------ Fallback AI Models ------------------
-GPT4ALL_AVAILABLE = False
-try:
-    from gpt4all import GPT4All
-    GPT4ALL_AVAILABLE = True
-    print("✓ GPT4All available as fallback")
-except:
-    pass
-
-SENTIMENT_AVAILABLE = False
-try:
-    from transformers import pipeline
-    sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-    SENTIMENT_AVAILABLE = True
-    print("✓ Sentiment Analysis loaded")
-except:
-    pass
 
 # ------------------ Configuration ------------------
 DATA_DIR = Path("jarvis_full_data")
@@ -301,15 +284,7 @@ def fallback_decision(input_text):
     
     elif any(word in input_lower for word in ["3d", "modell", "anyag"]):
         return "Elindítom a 3D anyag generálást. Milyen anyagot szeretnél?"
-    
-    # Try GPT4All if available
-    elif GPT4ALL_AVAILABLE:
-        try:
-            llm = GPT4All("orca-mini-3b-gguf2-q4_0.gguf")
-            prompt = f"You are JARVIS. Respond to: {input_text}\nKeep it concise:"
-            return llm.generate(prompt, max_tokens=150)
-        except:
-            pass
+
     
     return "Sajnálom, jelenleg korlátozott módban működöm. Telepítsd az Ollama-t a teljes funkcionalitáshoz: https://ollama.ai"
 
@@ -330,15 +305,6 @@ def decide_action(input_text, stream_callback=None):
     history = load_history()
     context = load_context()
     
-    # Analyze sentiment if available
-    sentiment_data = None
-    if SENTIMENT_AVAILABLE:
-        try:
-            sentiment = sentiment_analyzer(input_text)[0]
-            sentiment_data = sentiment
-        except:
-            pass
-    
     # Use Ollama if available
     if OLLAMA_AVAILABLE:
         response = chat_with_ollama(input_text, history, config, stream_callback)
@@ -354,14 +320,12 @@ def decide_action(input_text, stream_callback=None):
     context["last_topics"].append(input_text[:50])
     context["last_topics"] = context["last_topics"][-5:]
     save_context(context)
-    
-    # Log to memory
-    log_interaction(input_text, response, sentiment_data)
+
     
     return response
 
 # ------------------ Memory Logging ------------------
-def log_interaction(input_text, response, sentiment=None):
+def log_interaction(input_text, response):
     """Log interaction to memory file"""
     try:
         memory = []
@@ -373,7 +337,6 @@ def log_interaction(input_text, response, sentiment=None):
             "time": datetime.utcnow().isoformat(),
             "input": input_text,
             "response": response[:200] + "..." if len(response) > 200 else response,
-            "sentiment": sentiment,
             "ai_type": "ollama" if OLLAMA_AVAILABLE else "fallback"
         })
         
@@ -426,8 +389,6 @@ def get_ai_status():
     return {
         "ollama": OLLAMA_AVAILABLE,
         "web_search": WEB_SEARCH_AVAILABLE,
-        "gpt4all_fallback": GPT4ALL_AVAILABLE,
-        "sentiment_analysis": SENTIMENT_AVAILABLE,
         "streaming": OLLAMA_AVAILABLE,
         "internet_access": WEB_SEARCH_AVAILABLE
     }
