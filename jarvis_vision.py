@@ -22,7 +22,7 @@ def start_vision():
         return
 
     try:
-        detector = YOLO("models/yolov8n.pt")  # YOLO modell betöltése
+        detector = YOLO("models/yolo11s.pt")  # YOLO modell betöltése
     except Exception as e:
         print("YOLO modell betöltési hiba:", e)
         return
