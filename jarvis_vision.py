@@ -12,6 +12,45 @@ try:
 except Exception:
     print("YOLO import hiba! Objektumfelismerés offline nem működik.")
 
+# ------------------ Egyszeri objektumfelismerés ------------------
+def getRecData():
+    if not YOLO_AVAILABLE:
+        print("YOLO nem elérhető, a kamera modul nem indul.")
+        return
+
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Kamera nem elérhető!")
+        return
+
+    try:
+        detector = YOLO("models/yolo11s.pt")  # YOLO modell betöltése
+    except Exception as e:
+        print("YOLO modell betöltési hiba:", e)
+        return
+
+    ret, frame = cap.read()
+    if not ret:
+        print("Kamera olvasási hiba!")
+        return
+    items = []
+    # YOLO feldolgozás
+    try:
+        results = detector(frame)
+        for result in results:
+            names = result.names  # class id -> class name mapping
+
+            for cls_id, conf in zip(result.boxes.cls, result.boxes.conf):
+                class_name = names[int(cls_id)] if int(cls_id) in names else "Ismeretlen"
+                confidence = float(conf)
+
+                # Draw label above rectangle
+                label = f"{class_name} ({confidence:.2f})"
+                items.append(label)
+            return items
+    except Exception as e:
+        print("YOLO feldolgozási hiba:", e)
+
 # ------------------ Objektumfelismerés elindítása ------------------
 def start_vision():
     if not YOLO_AVAILABLE:
