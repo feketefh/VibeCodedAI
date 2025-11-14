@@ -1,32 +1,368 @@
-import whisper
-import pyaudio
+# jarvis_voice_recognition.py
+# Complete voice recognition module with recording and transcription
 import wave
+from pathlib import Path
 
-# Load model (downloads automatically)
-model = whisper.load_model("large-v3-turbo")  # tiny, base, small, medium, large
+# Voice Recognition
+VOICE_AVAILABLE = False
+try:
+    import whisper
+    import pyaudio
+    import numpy as np
+    VOICE_AVAILABLE = True
+    print("✓ Voice recognition loaded")
+except Exception as e:
+    print(f"⚠ Voice recognition not available: {e}")
+    print("Install with: pip install openai-whisper pyaudio")
 
-def listen_and_transcribe():
+# ------------------ Configuration ------------------
+DATA_DIR = Path("jarvis_full_data")
+DATA_DIR.mkdir(exist_ok=True)
+TEMP_AUDIO_FILE = DATA_DIR / "temp_recording.wav"
+
+# Whisper model (loaded on first use)
+whisper_model = None
+CURRENT_MODEL = "base"  # Options: tiny, base, small, medium, large, large-v3-turbo
+
+# ------------------ Model Management ------------------
+def load_whisper_model(model_name="base"):
+    """
+    Load Whisper model (lazy loading)
+    
+    Args:
+        model_name: Model size (tiny, base, small, medium, large, large-v3-turbo)
+    
+    Returns:
+        Loaded model or None if failed
+    """
+    global whisper_model, CURRENT_MODEL
+    
+    if not VOICE_AVAILABLE:
+        print("❌ Whisper not available")
+        return None
+    
+    if whisper_model is not None and CURRENT_MODEL == model_name:
+        return whisper_model
+    
+    try:
+        print(f"🔄 Loading Whisper model: {model_name}")
+        whisper_model = whisper.load_model(model_name)
+        CURRENT_MODEL = model_name
+        print(f"✓ Whisper model '{model_name}' loaded")
+        return whisper_model
+    except Exception as e:
+        print(f"❌ Failed to load Whisper model: {e}")
+        return None
+
+# ------------------ Audio Recording ------------------
+def record_audio(duration=5, sample_rate=16000):
+    """
+    Record audio from microphone
+    
+    Args:
+        duration: Recording duration in seconds (default: 5)
+        sample_rate: Audio sample rate (default: 16000)
+    
+    Returns:
+        Path to saved audio file or None if failed
+    """
+    if not VOICE_AVAILABLE:
+        print("❌ PyAudio not available")
+        return None
+    
+    try:
+        audio = pyaudio.PyAudio()
+        
+        # Find default input device
+        try:
+            default_device = audio.get_default_input_device_info()
+            print(f"🎤 Using microphone: {default_device['name']}")
+        except:
+            print("⚠ No default microphone found, trying anyway...")
+        
+        # Open audio stream
+        stream = audio.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=sample_rate,
+            input=True,
+            frames_per_buffer=1024
+        )
+        
+        print(f"🎤 Recording for {duration} seconds...")
+        frames = []
+        
+        # Record audio in chunks
+        for i in range(0, int(sample_rate / 1024 * duration)):
+            try:
+                data = stream.read(1024, exception_on_overflow=False)
+                frames.append(data)
+            except Exception as e:
+                print(f"⚠ Read error: {e}")
+                break
+        
+        print("✓ Recording complete")
+        
+        # Clean up
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+        
+        # Save to WAV file
+        with wave.open(str(TEMP_AUDIO_FILE), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
+            wf.setframerate(sample_rate)
+            wf.writeframes(b''.join(frames))
+        
+        print(f"✓ Audio saved: {TEMP_AUDIO_FILE}")
+        return TEMP_AUDIO_FILE
+        
+    except Exception as e:
+        print(f"❌ Recording error: {e}")
+        return None
+
+# ------------------ Audio Transcription ------------------
+def transcribe_audio(audio_path, language="hu", model_name="base"):
+    """
+    Transcribe audio file using Whisper
+    
+    Args:
+        audio_path: Path to audio file
+        language: Language code (default: "hu" for Hungarian, None for auto-detect)
+        model_name: Whisper model to use
+    
+    Returns:
+        Transcribed text or None if failed
+    """
+    if not VOICE_AVAILABLE:
+        print("❌ Whisper not available")
+        return None
+    
+    if not audio_path or not Path(audio_path).exists():
+        print(f"❌ Audio file not found: {audio_path}")
+        return None
+    
+    try:
+        # Load model if needed
+        model = load_whisper_model(model_name)
+        if model is None:
+            return None
+        
+        print(f"🔄 Transcribing audio (language: {language if language else 'auto'})...")
+        
+        # Transcribe with options
+        result = model.transcribe(
+            str(audio_path),
+            language=language,
+            fp16=False  # Use FP32 for CPU compatibility
+        )
+        
+        text = result["text"].strip()
+        detected_lang = result.get("language", "unknown")
+        
+        print(f"✓ Transcription complete (detected: {detected_lang})")
+        print(f"📝 Text: {text}")
+        
+        return text
+        
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        return None
+
+# ------------------ Combined Function ------------------
+def listen_and_transcribe(duration=5, language="hu", model_name="base"):
+    """
+    Record audio from microphone and transcribe it
+    
+    Args:
+        duration: Recording duration in seconds
+        language: Language code ("hu" for Hungarian, None for auto-detect)
+        model_name: Whisper model size
+    
+    Returns:
+        Transcribed text or None if failed
+    """
+    print("\n" + "="*60)
+    print("🎤 JARVIS Voice Recognition")
+    print("="*60)
+    
     # Record audio
-    audio = pyaudio.PyAudio()
-    stream = audio.open(format=pyaudio.paInt16, channels=1, 
-                       rate=16000, input=True, frames_per_buffer=1024)
+    audio_path = record_audio(duration=duration)
+    if not audio_path:
+        return None
     
-    print("Listening...")
-    frames = []
-    for _ in range(0, int(16000 / 1024 * 5)):  # 5 seconds
-        data = stream.read(1024)
-        frames.append(data)
+    # Transcribe audio
+    text = transcribe_audio(audio_path, language=language, model_name=model_name)
     
-    stream.stop_stream()
-    stream.close()
-    audio.terminate()
+    print("="*60 + "\n")
     
-    # Save and transcribe
-    with wave.open("temp_audio.wav", "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
-        wf.setframerate(16000)
-        wf.writeframes(b''.join(frames))
+    return text
+
+# ------------------ List Available Devices ------------------
+def list_audio_devices():
+    """List all available audio input devices"""
+    if not VOICE_AVAILABLE:
+        print("❌ PyAudio not available")
+        return
     
-    result = model.transcribe("temp_audio.wav")
-    return result["text"]
+    try:
+        audio = pyaudio.PyAudio()
+        
+        print("\n" + "="*60)
+        print("🎤 Available Audio Devices")
+        print("="*60)
+        
+        info = audio.get_host_api_info_by_index(0)
+        num_devices = info.get('deviceCount')
+        
+        for i in range(0, num_devices):
+            device_info = audio.get_device_info_by_host_api_device_index(0, i)
+            
+            if device_info.get('maxInputChannels') > 0:
+                print(f"\n[Device {i}]")
+                print(f"  Name: {device_info.get('name')}")
+                print(f"  Channels: {device_info.get('maxInputChannels')}")
+                print(f"  Sample Rate: {device_info.get('defaultSampleRate')}")
+        
+        print("\n" + "="*60 + "\n")
+        
+        audio.terminate()
+        
+    except Exception as e:
+        print(f"❌ Error listing devices: {e}")
+
+# ------------------ Test Audio Recording ------------------
+def test_microphone(duration=3):
+    """
+    Test microphone by recording and playing back
+    
+    Args:
+        duration: Test duration in seconds
+    """
+    print("\n🧪 Testing microphone...")
+    audio_path = record_audio(duration=duration)
+    
+    if audio_path:
+        print(f"✓ Microphone test successful!")
+        print(f"  Audio saved to: {audio_path}")
+        print(f"  Duration: {duration} seconds")
+        return True
+    else:
+        print("❌ Microphone test failed")
+        return False
+
+# ------------------ Get Available Models ------------------
+def get_available_models():
+    """Return list of available Whisper models"""
+    return {
+        "tiny": {"size": "~75MB", "speed": "⚡⚡⚡", "quality": "⭐⭐"},
+        "base": {"size": "~150MB", "speed": "⚡⚡⚡", "quality": "⭐⭐⭐"},
+        "small": {"size": "~500MB", "speed": "⚡⚡", "quality": "⭐⭐⭐⭐"},
+        "medium": {"size": "~1.5GB", "speed": "⚡", "quality": "⭐⭐⭐⭐"},
+        "large": {"size": "~3GB", "speed": "⚡", "quality": "⭐⭐⭐⭐⭐"},
+        "large-v3-turbo": {"size": "~1.5GB", "speed": "⚡⚡", "quality": "⭐⭐⭐⭐⭐"}
+    }
+
+def print_model_info():
+    """Print information about available models"""
+    models = get_available_models()
+    
+    print("\n" + "="*60)
+    print("📊 Available Whisper Models")
+    print("="*60)
+    
+    for model_name, info in models.items():
+        print(f"\n{model_name}:")
+        print(f"  Size: {info['size']}")
+        print(f"  Speed: {info['speed']}")
+        print(f"  Quality: {info['quality']}")
+    
+    print("\n" + "="*60)
+    print("Recommendation: 'base' for good balance, 'small' for better quality")
+    print("="*60 + "\n")
+
+# ------------------ Status Check ------------------
+def get_voice_status():
+    """Get current voice recognition status"""
+    return {
+        "available": VOICE_AVAILABLE,
+        "whisper_loaded": whisper_model is not None,
+        "current_model": CURRENT_MODEL if whisper_model else None,
+        "temp_audio_file": str(TEMP_AUDIO_FILE)
+    }
+
+# ------------------ Test/CLI Mode ------------------
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print("JARVIS Voice Recognition Module - Test Mode")
+    print("="*60 + "\n")
+    
+    # Check availability
+    status = get_voice_status()
+    print("Status:")
+    print(f"  {'✓' if status['available'] else '✗'} Voice recognition available")
+    
+    if not status['available']:
+        print("\n❌ Voice recognition not available!")
+        print("Install with:")
+        print("  pip install openai-whisper pyaudio")
+        exit(1)
+    
+    print()
+    
+    # Show available models
+    print_model_info()
+    
+    # List audio devices
+    list_audio_devices()
+    
+    # Test microphone
+    print("Testing microphone...")
+    if not test_microphone(duration=2):
+        print("\n⚠ Microphone test failed, but continuing...")
+    
+    print()
+    
+    # Interactive mode
+    while True:
+        print("\nOptions:")
+        print("  [1] Record and transcribe (Hungarian)")
+        print("  [2] Record and transcribe (Auto-detect)")
+        print("  [3] Change Whisper model")
+        print("  [4] Test microphone")
+        print("  [5] List audio devices")
+        print("  [0] Exit")
+        
+        choice = input("\nSelect option: ").strip()
+        
+        if choice == "1":
+            text = listen_and_transcribe(duration=5, language="hu", model_name=CURRENT_MODEL)
+            if text:
+                print(f"\n✅ Result: {text}")
+        
+        elif choice == "2":
+            text = listen_and_transcribe(duration=5, language=None, model_name=CURRENT_MODEL)
+            if text:
+                print(f"\n✅ Result: {text}")
+        
+        elif choice == "3":
+            print("\nAvailable models: tiny, base, small, medium, large, large-v3-turbo")
+            model = input(f"Enter model name (current: {CURRENT_MODEL}): ").strip()
+            if model:
+                load_whisper_model(model)
+        
+        elif choice == "4":
+            duration = input("Duration in seconds (default: 3): ").strip()
+            duration = int(duration) if duration.isdigit() else 3
+            test_microphone(duration)
+        
+        elif choice == "5":
+            list_audio_devices()
+        
+        elif choice == "0":
+            print("\n👋 Goodbye!")
+            break
+        
+        else:
+            print("Invalid option")

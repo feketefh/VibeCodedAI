@@ -195,7 +195,7 @@ def web_search(query, retries=MAX_SEARCH_RETRIES):
 # ------------------ Ollama Chat Function ------------------
 def chat_with_ollama(user_input, history, config, stream_callback=None):
     """
-    Chat with Ollama model with streaming support
+    Chat with Ollama model with optional streaming support
     
     Args:
         user_input: User's message
@@ -216,19 +216,23 @@ def chat_with_ollama(user_input, history, config, stream_callback=None):
     model_name = config.get("model", "llama3.2")
     
     try:
-        # Stream the response
-        for chunk in ollama.chat(
+        # Always use non-streaming mode - UI will handle streaming display
+        response = ollama.chat(
             model=model_name,
             messages=history,
-            stream=True
-        ):
-            if chunk.get("message") and chunk["message"].get("content"):
-                content = chunk["message"]["content"]
-                response_text += content
-                
-                # Call the callback if provided (for UI updates)
-                if stream_callback:
-                    stream_callback(content)
+            stream=False  # Disable Ollama streaming
+        )
+        
+        response_text = response['message']['content']
+        
+        # If callback provided, send response in chunks for UI streaming effect
+        if stream_callback:
+            # Split into words for smooth streaming effect
+            words = response_text.split()
+            for i, word in enumerate(words):
+                if i > 0:
+                    stream_callback(" ")
+                stream_callback(word)
         
         # Check if model requested a web search
         if "SEARCH(" in response_text.upper():
@@ -250,17 +254,22 @@ def chat_with_ollama(user_input, history, config, stream_callback=None):
                 if stream_callback:
                     stream_callback("\n[Processing search results...]\n")
                 
-                response_text = ""
-                for chunk in ollama.chat(
+                # Get follow-up response
+                response = ollama.chat(
                     model=model_name,
                     messages=history,
-                    stream=True
-                ):
-                    if chunk.get("message") and chunk["message"].get("content"):
-                        content = chunk["message"]["content"]
-                        response_text += content
-                        if stream_callback:
-                            stream_callback(content)
+                    stream=False
+                )
+                
+                response_text = response['message']['content']
+                
+                # Stream the follow-up response
+                if stream_callback:
+                    words = response_text.split()
+                    for i, word in enumerate(words):
+                        if i > 0:
+                            stream_callback(" ")
+                        stream_callback(word)
         
         # Add final response to history
         history.append({"role": "assistant", "content": response_text})
