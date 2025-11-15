@@ -21,7 +21,7 @@ except Exception as e:
 # ------------------ Web Search Import ------------------
 WEB_SEARCH_AVAILABLE = False
 try:
-    from ddgs import DDGS
+    from duckduckgo_search import DDGS
     WEB_SEARCH_AVAILABLE = True
     print("✓ DuckDuckGo search loaded")
 except Exception as e:
@@ -52,7 +52,32 @@ CRITICAL RULES FOR WEB SEARCH:
 3. DO NOT write tutorials about searching
 4. JUST DO THE SEARCH by writing SEARCH("query")
 
+SYSTEM TOOLS:
+You can use system tools by writing: TOOL("tool_name") or TOOL("tool_name", "args")
+
+Available tools:
+- TOOL("time") - Current time
+- TOOL("date") - Current date
+- TOOL("datetime") - Full date and time
+- TOOL("day") - Day of week
+- TOOL("year") - Current year
+- TOOL("month") - Current month name
+- TOOL("timestamp") - Unix timestamp
+- TOOL("calculate", "2+2*3") - Math calculations
+- TOOL("system") - Operating system info
+- TOOL("python_version") - Python version
+
 Examples of CORRECT behavior:
+
+User: "What time is it?"
+You: TOOL("time")
+[system provides: 14:30:45]
+You: "It's 2:30 PM."
+
+User: "What's 15 * 23?"
+You: TOOL("calculate", "15*23")
+[system provides: 345]
+You: "That's 345."
 
 User: "What's the weather in Budapest?"
 You: SEARCH("weather Budapest today")
@@ -75,15 +100,15 @@ RESPONSE STYLE:
 - Use contractions (I'm, you're, it's, etc.)
 
 YOUR CAPABILITIES:
+- System tools (time, date, calculations)
 - Web search (use SEARCH() for current info)
 - 3D rendering (Titanium, Gold, Steel, Copper, Glass, Diamond, etc.)
 - Security and firewall management
 - Computer vision and object detection
-- Time, date, system information
 
 CONVERSATION GUIDELINES:
 - For greetings: Be friendly but brief
-- For questions: Answer directly, search if needed
+- For questions: Answer directly, use tools/search if needed
 - For opinions: Engage naturally
 - For technical queries: Be precise but clear
 - For unclear requests: Ask clarifying questions
@@ -229,6 +254,78 @@ def web_search(query, retries=MAX_SEARCH_RETRIES):
     print("❌ No useful results found after retries.")
     return None  # Return None instead of error message
 
+# ------------------ System Tools/Modules ------------------
+def execute_system_tool(tool_name, args=None):
+    """
+    Execute system tools that JARVIS can use
+    Returns (success, result) tuple
+    """
+    tool_name = tool_name.lower().strip()
+    
+    try:
+        if tool_name in ['time', 'get_time', 'current_time']:
+            return (True, datetime.now().strftime('%H:%M:%S'))
+        
+        elif tool_name in ['date', 'get_date', 'current_date']:
+            return (True, datetime.now().strftime('%Y-%m-%d'))
+        
+        elif tool_name in ['datetime', 'get_datetime']:
+            return (True, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        
+        elif tool_name in ['day', 'weekday', 'day_of_week']:
+            return (True, datetime.now().strftime('%A'))
+        
+        elif tool_name in ['timestamp', 'unix_time']:
+            return (True, str(int(datetime.now().timestamp())))
+        
+        elif tool_name in ['year']:
+            return (True, str(datetime.now().year))
+        
+        elif tool_name in ['month']:
+            return (True, datetime.now().strftime('%B'))
+        
+        # Math operations
+        elif tool_name in ['calculate', 'calc', 'math']:
+            if args:
+                try:
+                    # Safe eval for basic math
+                    result = eval(args, {"__builtins__": {}}, {})
+                    return (True, str(result))
+                except:
+                    return (False, "Invalid calculation")
+            return (False, "No expression provided")
+        
+        # System info
+        elif tool_name in ['system', 'os', 'platform']:
+            import platform
+            return (True, f"{platform.system()} {platform.release()}")
+        
+        elif tool_name in ['python_version']:
+            import sys
+            return (True, sys.version.split()[0])
+        
+        else:
+            return (False, f"Unknown tool: {tool_name}")
+    
+    except Exception as e:
+        return (False, f"Tool error: {str(e)}")
+
+def detect_tool_usage(text):
+    """
+    Detect if the AI is trying to use a system tool
+    Returns (has_tool, tool_name, args) tuple
+    """
+    # Pattern: TOOL("tool_name") or TOOL("tool_name", "args")
+    tool_pattern = r'TOOL\s*\(\s*["\']([^"\']+)["\']\s*(?:,\s*["\']([^"\']+)["\']\s*)?\)'
+    match = re.search(tool_pattern, text, re.IGNORECASE)
+    
+    if match:
+        tool_name = match.group(1)
+        args = match.group(2) if match.group(2) else None
+        return (True, tool_name, args)
+    
+    return (False, None, None)
+
 # ------------------ Intelligent Search Detection ------------------
 def should_auto_search(user_input):
     """
@@ -362,6 +459,35 @@ Do NOT just list websites - give them the actual information."""
             
             response_text = response['message']['content'].strip()
             
+            # Check if model requested a system tool
+            has_tool, tool_name, tool_args = detect_tool_usage(response_text)
+            if has_tool:
+                print(f"🔧 Using tool: {tool_name}")
+                success, result = execute_system_tool(tool_name, tool_args)
+                
+                if success:
+                    # Add tool usage to temp history
+                    temp_history.append({
+                        "role": "assistant",
+                        "content": response_text
+                    })
+                    temp_history.append({
+                        "role": "user",
+                        "content": f"[TOOL RESULT for '{tool_name}']: {result}\n\nUse this information to answer the user naturally."
+                    })
+                    continue
+                else:
+                    # Tool failed, ask model to continue without it
+                    temp_history.append({
+                        "role": "assistant",
+                        "content": response_text
+                    })
+                    temp_history.append({
+                        "role": "user",
+                        "content": f"Tool failed: {result}. Please answer based on your knowledge."
+                    })
+                    continue
+            
             # Check if model requested a web search
             search_pattern = r'SEARCH\s*\(\s*["\'](.+?)["\']\s*\)'
             search_matches = re.findall(search_pattern, response_text, re.IGNORECASE)
@@ -494,6 +620,7 @@ def get_ai_status():
         "ollama": OLLAMA_AVAILABLE,
         "web_search": WEB_SEARCH_AVAILABLE,
         "auto_search": WEB_SEARCH_AVAILABLE,
+        "system_tools": True,
         "streaming": OLLAMA_AVAILABLE,
         "internet_access": WEB_SEARCH_AVAILABLE
     }
