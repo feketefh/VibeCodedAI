@@ -48,8 +48,6 @@ pyttsx3
 # Faster Whisper for voice recognition:
 faster-whisper
 
-# Face recognition:
-face-recognition
 
 # Audio processing:
 pyaudio
