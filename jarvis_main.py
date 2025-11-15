@@ -21,10 +21,10 @@ def run_all():
     gui = JarvisGUI()
 
     # 5️⃣ Háttér 3D anyag generálás
-    threading.Thread(
-        target=lambda: generate_material_preview("Titanium", "cube", 2.0),
-        daemon=True
-    ).start()
+    #threading.Thread(
+    #    target=lambda: generate_material_preview("Titanium", "cube", 2.0),
+    #    daemon=True
+    #).start()
 
     # 6️⃣ Háttér objektumfelismerés kamera használatával
     threading.Thread(target=start_vision, daemon=True).start()
