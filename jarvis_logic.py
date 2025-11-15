@@ -21,13 +21,12 @@ except Exception as e:
 # ------------------ Web Search Import ------------------
 WEB_SEARCH_AVAILABLE = False
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     WEB_SEARCH_AVAILABLE = True
     print("✓ DuckDuckGo search loaded")
 except Exception as e:
     print(f"⚠ Web search not available: {e}")
     print("Install with: pip install duckduckgo-search")
-
 
 # ------------------ Configuration ------------------
 DATA_DIR = Path("jarvis_full_data")
@@ -43,41 +42,83 @@ MAX_SEARCH_RETRIES = 3
 # ------------------ Default Configuration ------------------
 DEFAULT_CONFIG = {
     "model": "llama3.2",
-    "rules": """You are JARVIS, an advanced AI assistant created for a personal computer system.
+    "rules": """You are JARVIS, Tony Stark's AI assistant. Be concise, helpful, and natural.
 
-Rules:
-- You are intelligent, helpful, and concise
-- Follow only what is written in these rules
-- You may request internet searches by writing: SEARCH("query")
-- When you need current information, always use SEARCH()
-- Keep responses natural and informative
-- You can control 3D rendering, security systems, and computer vision
-- Respond in Hungarian when the user speaks Hungarian, otherwise in English
-- If you need more information, ask to search again
-- Be professional but friendly, like Tony Stark's JARVIS
+CRITICAL RULES FOR WEB SEARCH:
+1. When you need current information (weather, news, time-sensitive data), immediately write:
+   SEARCH("your search query here")
+   
+2. DO NOT explain how to search
+3. DO NOT write tutorials about searching
+4. JUST DO THE SEARCH by writing SEARCH("query")
 
-Capabilities you can reference:
-- 3D material generation (Titanium, Gold, Steel, Copper, Glass, etc.)
+Examples of CORRECT behavior:
+
+User: "What's the weather in Budapest?"
+You: SEARCH("weather Budapest today")
+[system provides results]
+You: "Currently in Budapest it's 5°C with partly cloudy skies..."
+
+User: "Latest news about AI"
+You: SEARCH("latest AI news 2024")
+[system provides results]
+You: "Recent AI developments include..."
+
+User: "I like dogs"
+You: "That's great! Dogs make wonderful companions. Do you have one, or are you thinking about getting one?"
+
+RESPONSE STYLE:
+- Be direct and conversational (like talking to a friend)
+- Keep responses brief (2-3 sentences unless more detail needed)
+- Match the user's language (English/Hungarian)
+- Show personality but stay professional
+- Use contractions (I'm, you're, it's, etc.)
+
+YOUR CAPABILITIES:
+- Web search (use SEARCH() for current info)
+- 3D rendering (Titanium, Gold, Steel, Copper, Glass, Diamond, etc.)
 - Security and firewall management
 - Computer vision and object detection
-- Time, date, and system information
-- Web search for current information""",
+- Time, date, system information
+
+CONVERSATION GUIDELINES:
+- For greetings: Be friendly but brief
+- For questions: Answer directly, search if needed
+- For opinions: Engage naturally
+- For technical queries: Be precise but clear
+- For unclear requests: Ask clarifying questions
+
+REMEMBER: You're an assistant, not a tutor. ACT, don't explain!""",
     "temperature": 0.7,
-    "stream": True,
     "max_tokens": 500
 }
 
+# ------------------ Cache for config to avoid repeated disk reads ------------------
+_config_cache = None
+_config_last_modified = None
+
 # ------------------ Load/Save Config ------------------
 def load_config():
-    """Load configuration from YAML file"""
+    """Load configuration from YAML file with caching"""
+    global _config_cache, _config_last_modified
+    
     if not CONFIG_FILE.exists():
         print("📝 Creating default config.yaml...")
         save_config(DEFAULT_CONFIG)
+        _config_cache = DEFAULT_CONFIG
         return DEFAULT_CONFIG
     
     try:
+        # Check if file was modified
+        current_modified = CONFIG_FILE.stat().st_mtime
+        if _config_cache and _config_last_modified == current_modified:
+            return _config_cache
+        
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        
+        _config_cache = config
+        _config_last_modified = current_modified
         print(f"✓ Config loaded: Model={config.get('model', 'llama3.2')}")
         return config
     except Exception as e:
@@ -86,9 +127,12 @@ def load_config():
 
 def save_config(config):
     """Save configuration to YAML file"""
+    global _config_cache, _config_last_modified
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+        _config_cache = config
+        _config_last_modified = CONFIG_FILE.stat().st_mtime
         print("✓ Config saved")
     except Exception as e:
         print(f"⚠ Config save error: {e}")
@@ -99,7 +143,12 @@ def load_history():
     if HISTORY_FILE.exists():
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                history = json.load(f)
+                # Ensure we have a system message
+                if not history or history[0].get("role") != "system":
+                    config = load_config()
+                    history.insert(0, {"role": "system", "content": config.get("rules", DEFAULT_CONFIG["rules"])})
+                return history
         except Exception as e:
             print(f"⚠ History load error: {e}")
     
@@ -110,8 +159,9 @@ def load_history():
 def save_history(history):
     """Save chat history to JSON"""
     try:
-        # Keep only last 50 messages
-        history = history[:1] + history[-49:]  # Keep system message + last 49
+        # Keep only last 30 messages (plus system message)
+        if len(history) > 31:
+            history = [history[0]] + history[-30:]  # Keep system message + last 30
         with open(HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -148,7 +198,7 @@ def save_context(context):
 def web_search(query, retries=MAX_SEARCH_RETRIES):
     """Search the web using DuckDuckGo with automatic retries"""
     if not WEB_SEARCH_AVAILABLE:
-        return "Web search not available. Install: pip install duckduckgo-search"
+        return None  # Return None to indicate failure
     
     print(f"\n🔎 Searching the web for: {query}")
     results_text = ""
@@ -156,14 +206,18 @@ def web_search(query, retries=MAX_SEARCH_RETRIES):
     for attempt in range(retries):
         try:
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=5))
+                results = list(ddgs.text(query, max_results=8))  # Get more results for better info
             
             if not results:
                 print(f"⚠️ No results found, retrying... ({attempt + 1}/{retries})")
                 continue
             
-            for r in results:
-                results_text += f"- {r['title']}: {r['body']}\n  URL: {r['href']}\n\n"
+            # Format results with more detail
+            for i, r in enumerate(results, 1):
+                results_text += f"\n[Source {i}] {r['title']}\n"
+                results_text += f"{r['body']}\n"
+                if 'href' in r:
+                    results_text += f"URL: {r['href']}\n"
             
             if results_text.strip():
                 print("✅ Found results.")
@@ -173,8 +227,58 @@ def web_search(query, retries=MAX_SEARCH_RETRIES):
             print(f"⚠️ Search attempt {attempt + 1} failed: {e}")
     
     print("❌ No useful results found after retries.")
-    return "No relevant information found online."
+    return None  # Return None instead of error message
 
+# ------------------ Intelligent Search Detection ------------------
+def should_auto_search(user_input):
+    """
+    Detect if user input requires automatic web search
+    Returns (should_search, query) tuple
+    """
+    user_lower = user_input.lower()
+    
+    # Keywords that indicate need for current info
+    search_triggers = {
+        'weather': lambda text: f"weather {extract_location(text)} today",
+        'temperature': lambda text: f"temperature {extract_location(text)} now",
+        'news': lambda text: f"latest news {extract_topic(text)} {datetime.now().year}",
+        'stock': lambda text: f"stock price {extract_topic(text)}",
+        'price': lambda text: f"current price {extract_topic(text)}",
+        'score': lambda text: f"latest {extract_topic(text)} score",
+        'match': lambda text: f"latest {extract_topic(text)} match result",
+        'when': lambda text: None,  # "when" questions often need search
+        'today': lambda text: None,
+        'now': lambda text: None,
+        'current': lambda text: None,
+        'latest': lambda text: None,
+    }
+    
+    for trigger, query_builder in search_triggers.items():
+        if trigger in user_lower:
+            if query_builder:
+                query = query_builder(user_input)
+                return (True, query)
+            # For generic triggers, let the AI decide
+            return (False, None)
+    
+    return (False, None)
+
+def extract_location(text):
+    """Extract location from text (simple approach)"""
+    # Common location patterns
+    words = text.split()
+    # Look for capitalized words that might be locations
+    for i, word in enumerate(words):
+        if word[0].isupper() and word.lower() not in ['i', 'what', 'how', 'when']:
+            return word
+    return "here"
+
+def extract_topic(text):
+    """Extract topic from text"""
+    # Remove common question words
+    remove_words = ['what', 'how', 'when', 'is', 'the', 'latest', 'current', 'news', 'about', 'price', 'of']
+    words = [w for w in text.lower().split() if w not in remove_words]
+    return ' '.join(words[:3]) if words else ""
 
 # ------------------ Fallback Decision Making ------------------
 def fallback_decision(input_text):
@@ -183,123 +287,146 @@ def fallback_decision(input_text):
     
     # Basic responses
     if any(word in input_lower for word in ["hello", "szia", "hi", "helló", "üdv"]):
-        return "Szia! Én vagyok JARVIS. Miben segíthetek?"
+        return "Hello! I'm JARVIS. How can I assist you today?"
     
-    elif "idő" in input_lower or "óra" in input_lower:
-        return f"A pontos idő: {datetime.now().strftime('%H:%M:%S')}"
+    elif "time" in input_lower or "idő" in input_lower or "óra" in input_lower:
+        return f"The current time is {datetime.now().strftime('%H:%M:%S')}"
     
-    elif "dátum" in input_lower or "nap" in input_lower:
-        return f"A mai dátum: {datetime.now().strftime('%Y-%m-%d')}"
+    elif "date" in input_lower or "dátum" in input_lower or "nap" in input_lower:
+        return f"Today's date is {datetime.now().strftime('%Y-%m-%d')}"
     
-    elif "ki vagy" in input_lower or "név" in input_lower:
-        return "Én vagyok JARVIS, egy mesterséges intelligencia asszisztens."
+    elif "who are you" in input_lower or "ki vagy" in input_lower or "név" in input_lower:
+        return "I am JARVIS, your AI assistant."
     
-    elif any(word in input_lower for word in ["3d", "modell", "anyag"]):
-        return "Elindítom a 3D anyag generálást. Milyen anyagot szeretnél?"
+    elif any(word in input_lower for word in ["3d", "modell", "model", "anyag", "material"]):
+        return "Initiating 3D material generation. Which material would you like? (Titanium, Gold, Steel, Copper, Glass, etc.)"
+    
+    return "I apologize, but I'm running in limited mode. Please install Ollama for full functionality: https://ollama.ai"
 
-    
-    return "Sajnálom, jelenleg korlátozott módban működöm. Telepítsd az Ollama-t a teljes funkcionalitáshoz: https://ollama.ai"
 
-# ------------------ Ask AI function ------------------
-def askAI(user_input, stream_callback=False):
+# ------------------ Ollama Chat Function ------------------
+def askAI(user_input, stream_callback=None):
     """
-    Chat with Ollama model with optional streaming support
-    
-    Args:
-        user_input: User's message
-        history: Chat history
-        config: Configuration dict
-        stream_callback: Optional callback function for streaming (receives text chunks)
-    
-    Returns:
-        response_text: Complete response from the model
+    Chat with Ollama model with web search support and automatic search detection
     """
     config = load_config()
     history = load_history()
-    context = load_context()
-        
+
     if not OLLAMA_AVAILABLE:
-        response = fallback_decision(user_input)
-        history.append({"role": "user", "content": user_input})
-        history.append({"role": "assistant", "content": response})
+        return "Ollama not available. Install from: https://ollama.ai"
+    
+    # Check if we should automatically search
+    should_search, auto_query = should_auto_search(user_input)
     
     # Add user message to history
     history.append({"role": "user", "content": user_input})
     
-    response_text = ""
     model_name = config.get("model", "llama3.2")
+    max_search_attempts = 2  # Maximum number of search attempts
+    search_count = 0
+    
+    # Temporary history for search iterations (not saved until final answer)
+    temp_history = history.copy()
     
     try:
-        # Always use non-streaming mode - UI will handle streaming display
-        response = ollama.chat(
-            model=model_name,
-            messages=history,
-            stream=False  # Disable Ollama streaming
-        )
-        
-        response_text = response['message']['content']
-        
-        # If callback provided, send response in chunks for UI streaming effect
-        if stream_callback:
-            # Split into words for smooth streaming effect
-            words = response_text.split()
-            for i, word in enumerate(words):
-                if i > 0:
-                    stream_callback(" ")
-                stream_callback(word)
-        
-        # Check if model requested a web search
-        if "SEARCH(" in response_text.upper():
-            query_matches = re.findall(r'SEARCH\(["\'](.+?)["\']\)', response_text, re.IGNORECASE)
+        # If we detected a search need, perform it immediately
+        if should_search and auto_query and WEB_SEARCH_AVAILABLE:
+            print(f"🤖 Auto-detected search need: {auto_query}")
+            search_results = web_search(auto_query)
             
-            if query_matches:
-                query = query_matches[-1]  # Take last search request
+            if search_results:
+                # Inject search results before the AI responds
+                temp_history.append({
+                    "role": "assistant",
+                    "content": f'SEARCH("{auto_query}")'
+                })
+                temp_history.append({
+                    "role": "user",
+                    "content": f"""[SEARCH RESULTS for "{auto_query}"]
+
+{search_results}
+
+Based on these search results, answer the user's question directly and naturally. 
+Extract the specific information they need (like temperature, news, etc.) and present it conversationally.
+Do NOT just list websites - give them the actual information."""
+                })
+                search_count = 1  # Count the auto-search
+        
+        while search_count < max_search_attempts:
+            # Get response from Ollama
+            response = ollama.chat(
+                model=model_name,
+                messages=temp_history,
+                stream=False
+            )
+            
+            response_text = response['message']['content'].strip()
+            
+            # Check if model requested a web search
+            search_pattern = r'SEARCH\s*\(\s*["\'](.+?)["\']\s*\)'
+            search_matches = re.findall(search_pattern, response_text, re.IGNORECASE)
+            
+            if search_matches and WEB_SEARCH_AVAILABLE and search_count < max_search_attempts:
+                search_count += 1
+                query = search_matches[0]
+                
+                # Perform search
                 search_results = web_search(query)
                 
-                # Add search results to history
-                history.append({"role": "assistant", "content": response_text})
-                history.append({
-                    "role": "system", 
-                    "content": f"[Web search results for '{query}']:\n{search_results}"
+                if search_results is None:
+                    # Search failed, ask model to answer without search
+                    temp_history.append({
+                        "role": "assistant",
+                        "content": response_text
+                    })
+                    temp_history.append({
+                        "role": "user",
+                        "content": f"The search failed. Please answer based on your existing knowledge instead."
+                    })
+                    continue
+                
+                # Add assistant's search request to temp history
+                temp_history.append({
+                    "role": "assistant",
+                    "content": response_text
                 })
                 
-                # Get model to summarize/use the results
-                print("\n🤖 Processing search results...")
-                if stream_callback:
-                    stream_callback("\n[Processing search results...]\n")
-                
-                # Get follow-up response
-                response = ollama.chat(
-                    model=model_name,
-                    messages=history,
-                    stream=False
-                )
-                
-                response_text = response['message']['content']
-                
-                # Stream the follow-up response
-                if stream_callback:
-                    words = response_text.split()
-                    for i, word in enumerate(words):
-                        if i > 0:
-                            stream_callback(" ")
-                        stream_callback(word)
-        
-        # Add final response to history
-        history.append({"role": "assistant", "content": response_text})
-        save_history(history)
+                # Add search results with clear instruction for final answer
+                temp_history.append({
+                    "role": "user",
+                    "content": f"""[SEARCH RESULTS for "{query}"]
 
-        # Update context
-        context["last_topics"].append(user_input[:50])
-        context["last_topics"] = context["last_topics"][-5:]
-        save_context(context)
-        return response_text
+{search_results}
+
+IMPORTANT: Based on these search results, provide your FINAL answer to the user's question.
+Extract the key information (temperature, facts, data, etc.) and present it naturally.
+Do NOT just list websites or sources - give the actual answer.
+Do NOT request another search. Answer conversationally."""
+                })
+                
+                # Continue loop to get final answer
+                continue
+            else:
+                # No search needed or max searches reached - this is the final answer
+                # Only save the original user message and final response to history
+                history.append({"role": "assistant", "content": response_text})
+                save_history(history)
+                
+                return response_text
+        
+        # If we exit loop without returning (too many searches)
+        final_msg = "I apologize, but I'm having trouble finding the right information. Could you rephrase your question?"
+        history.append({"role": "assistant", "content": final_msg})
+        save_history(history)
+        return final_msg
         
     except Exception as e:
-        error_msg = f"Ollama error: {e}"
-        print(f"❌ {error_msg}")
+        error_msg = f"I apologize, but I encountered an error: {str(e)}. Please try again."
+        print(f"❌ Error in askAI: {e}")
+        # Save error to history to maintain context
+        history.append({"role": "assistant", "content": error_msg})
+        save_history(history)
         return error_msg
-
 
 # ------------------ Memory Logging ------------------
 def log_interaction(input_text, response):
@@ -313,7 +440,7 @@ def log_interaction(input_text, response):
         memory.append({
             "time": datetime.utcnow().isoformat(),
             "input": input_text,
-            "response": response[:200] + "..." if len(response) > 200 else response,
+            "response": response[:500] + "..." if len(response) > 500 else response,
             "ai_type": "ollama" if OLLAMA_AVAILABLE else "fallback"
         })
         
@@ -366,6 +493,7 @@ def get_ai_status():
     return {
         "ollama": OLLAMA_AVAILABLE,
         "web_search": WEB_SEARCH_AVAILABLE,
+        "auto_search": WEB_SEARCH_AVAILABLE,
         "streaming": OLLAMA_AVAILABLE,
         "internet_access": WEB_SEARCH_AVAILABLE
     }
@@ -418,12 +546,9 @@ if __name__ == "__main__":
             
             print("JARVIS: ", end="", flush=True)
             
-            # Stream callback for real-time output
-            def print_stream(text):
-                print(text, end="", flush=True)
-            
-            response = askAI(user_input, stream_callback=print_stream)
-            print("\n")
+            response = askAI(user_input)
+            print(response)
+            print()
             
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")
