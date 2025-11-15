@@ -12,7 +12,6 @@ TTS_ENGINE = None
 try:
     import pyttsx3
     TTS_AVAILABLE = True
-    # Don't initialize here - will be initialized in main thread
 except Exception as e:
     print(f"TTS nem elérhető: {e}")
 
@@ -40,6 +39,7 @@ def init_tts():
             TTS_ENGINE.setProperty('rate', 150)
             TTS_ENGINE.setProperty('volume', 0.9)
             print("✓ TTS engine initialized")
+            return True
         except Exception as e:
             print(f"TTS init error: {e}")
             return False
@@ -73,14 +73,19 @@ def load_settings():
     try:
         if SETTINGS_FILE.exists():
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        else:
-            with open(SETTINGS_FILE, "w") as f:
-                json.dump(default_config, f, indent=4)
+                loaded = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                return {**default_config, **loaded}
     except Exception as e:
         print(f"Settings load error: {e}")
     
-    # Default settings
+    # Save default settings
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Settings save error: {e}")
+    
     return default_config
 
 def save_settings(settings):
@@ -88,6 +93,7 @@ def save_settings(settings):
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2, ensure_ascii=False)
+        print(f"✓ Settings saved: {settings}")
     except Exception as e:
         print(f"Settings save error: {e}")
 
@@ -102,26 +108,43 @@ class JarvisGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # Initialize TTS in main thread
-        init_tts()
+        tts_init_success = init_tts()
         
-        # Load settings from file - use plain dict, not Tkinter vars yet
+        # Load settings from file FIRST
         self.settings = load_settings()
+        
+        # Override TTS setting if init failed
+        if not tts_init_success:
+            self.settings["tts_enabled"] = False
         
         # Recording state
         self.is_recording = False
         
         # Streaming state
         self.current_stream_message = ""
-        self.stream_sender = None  # Track who is sending the stream
+        self.stream_sender = None
         self.stream_queue = queue.Queue()
         
         # TTS queue for thread-safe TTS
         self.tts_queue = queue.Queue()
         
-        # Plain Python settings (not Tkinter variables)
-        self._tts_enabled = self.settings.get("tts_enabled", TTS_AVAILABLE)
-        self._stream_enabled = self.settings.get("stream_enabled", False)
+        # Create Tkinter variables AFTER root is created
+        # Initialize with loaded settings
+        self.tts_enabled = tk.BooleanVar(value=self.settings.get("tts_enabled", False))
+        self.stream_enabled = tk.BooleanVar(value=self.settings.get("stream_enabled", False))
         
+        # Build UI
+        self._build_ui()
+        
+        # Start processors
+        self.process_stream_queue()
+        self.process_tts_queue()
+        
+        # Welcome message
+        self.add_message("JARVIS", "Üdvözlöm! Miben segíthetek?")
+    
+    def _build_ui(self):
+        """Build the UI components"""
         # Title
         self.title_label = tk.Label(
             self.root,
@@ -207,8 +230,7 @@ class JarvisGUI:
         self.settings_frame = tk.Frame(self.root, bg="#1a1a1a")
         self.settings_frame.pack(pady=5, padx=20, fill=tk.X)
         
-        # TTS toggle - Create Tkinter variable AFTER root is created
-        self.tts_enabled = tk.BooleanVar(value=self._tts_enabled)
+        # TTS toggle
         self.tts_checkbox = tk.Checkbutton(
             self.settings_frame,
             text="🔊 Enable TTS",
@@ -223,8 +245,11 @@ class JarvisGUI:
         )
         self.tts_checkbox.pack(side=tk.LEFT, padx=10)
         
+        # Disable TTS checkbox if not available
+        if not TTS_AVAILABLE or not TTS_ENGINE:
+            self.tts_checkbox.config(state=tk.DISABLED)
+        
         # Streaming toggle
-        self.stream_enabled = tk.BooleanVar(value=self._stream_enabled)
         self.stream_checkbox = tk.Checkbutton(
             self.settings_frame,
             text="⚡ Enable Streaming",
@@ -251,24 +276,8 @@ class JarvisGUI:
         )
         self.clear_button.pack(side=tk.RIGHT, padx=10)
         
-        # Start stream processor
-        self.process_stream_queue()
-        
-        # Start TTS processor
-        self.process_tts_queue()
-        
-        # Welcome message
-        self.add_message("JARVIS", "Üdvözlöm! Miben segíthetek?")
-        
     def add_message(self, sender, message, streaming=False):
-        """
-        Add message to chat window
-        
-        Args:
-            sender: Message sender name
-            message: Message content
-            streaming: If True, message is part of a stream
-        """
+        """Add message to chat window"""
         self.chat_display.config(state=tk.NORMAL)
         
         if streaming:
@@ -284,8 +293,11 @@ class JarvisGUI:
     def start_stream_message(self, sender):
         """Start a new streaming message"""
         self.current_stream_message = ""
-        self.stream_sender = sender  # Remember the sender
-        # Don't add [JARVIS]: yet - will be added when first content arrives
+        self.stream_sender = sender
+        # Add sender prefix
+        self.chat_display.config(state=tk.NORMAL)
+        self.chat_display.insert(tk.END, f"[{sender}]: ", "streaming")
+        self.chat_display.config(state=tk.DISABLED)
     
     def end_stream_message(self):
         """End the current streaming message"""
@@ -306,12 +318,6 @@ class JarvisGUI:
                 elif message == "__END__":
                     self.end_stream_message()
                 else:
-                    # Add [JARVIS]: prefix before first content
-                    if self.current_stream_message == "" and hasattr(self, 'stream_sender'):
-                        self.chat_display.config(state=tk.NORMAL)
-                        self.chat_display.insert(tk.END, f"[{self.stream_sender}]: ", "streaming")
-                        self.chat_display.config(state=tk.DISABLED)
-                    
                     self.current_stream_message += message
                     self.add_message("", message, streaming=True)
         except queue.Empty:
@@ -325,7 +331,8 @@ class JarvisGUI:
         try:
             while True:
                 text = self.tts_queue.get_nowait()
-                speak(text)  # Now called from main thread!
+                if self.tts_enabled.get() and TTS_ENGINE:  # Check if still enabled
+                    speak(text)
         except queue.Empty:
             pass
         
@@ -339,22 +346,30 @@ class JarvisGUI:
     def on_tts_toggle(self):
         """Called when TTS checkbox is toggled"""
         try:
-            self._tts_enabled = self.tts_enabled.get()
-            self.settings["tts_enabled"] = self._tts_enabled
+            new_value = self.tts_enabled.get()
+            self.settings["tts_enabled"] = new_value
             save_settings(self.settings)
-            print(f"✓ TTS setting saved: {self._tts_enabled}")
+            
+            status = "enabled" if new_value else "disabled"
+            print(f"✓ TTS {status}")
         except Exception as e:
             print(f"TTS toggle error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def on_stream_toggle(self):
         """Called when streaming checkbox is toggled"""
         try:
-            self._stream_enabled = self.stream_enabled.get()
-            self.settings["stream_enabled"] = self._stream_enabled
+            new_value = self.stream_enabled.get()
+            self.settings["stream_enabled"] = new_value
             save_settings(self.settings)
-            print(f"✓ Streaming setting saved: {self._stream_enabled}")
+            
+            status = "enabled" if new_value else "disabled"
+            print(f"✓ Streaming {status}")
         except Exception as e:
             print(f"Stream toggle error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def clear_chat(self):
         """Clear chat history"""
@@ -363,8 +378,11 @@ class JarvisGUI:
         self.chat_display.config(state=tk.DISABLED)
         
         # Clear conversation history
-        from jarvis_logic import clear_history
-        clear_history()
+        try:
+            from jarvis_logic import clear_history
+            clear_history()
+        except Exception as e:
+            print(f"Clear history error: {e}")
         
         self.add_message("JARVIS", "Chat history cleared. Starting fresh!")
     
@@ -386,7 +404,7 @@ class JarvisGUI:
             # Stop recording
             self.is_recording = False
             self.record_button.config(bg="#ffaa00", text="⏳")
-            self.status_label.config(text="🔄 Processing...", fg="#ffaa00")
+            self.status_label.config(text="📄 Processing...", fg="#ffaa00")
     
     def start_recording(self):
         """Start continuous recording until stopped"""
@@ -447,6 +465,8 @@ class JarvisGUI:
             
         except Exception as e:
             print(f"❌ Recording error: {e}")
+            import traceback
+            traceback.print_exc()
             self.root.after(0, lambda: self.status_label.config(text="❌ Recording failed", fg="#ff0000"))
             self.root.after(0, lambda: self.record_button.config(bg="#aa0000", text="🎤"))
             self.is_recording = False
@@ -456,7 +476,7 @@ class JarvisGUI:
         try:
             from jarvis_voice_recognition import transcribe_audio, TEMP_AUDIO_FILE
             
-            print("🔄 Transcribing audio...")
+            print("📄 Transcribing audio...")
             
             # Transcribe
             text = transcribe_audio(
@@ -466,17 +486,18 @@ class JarvisGUI:
             )
             
             if text:
-                # Insert transcribed text into input field ONLY
+                # Insert transcribed text into input field
                 self.root.after(0, lambda: self.input_entry.delete(0, tk.END))
                 self.root.after(0, lambda: self.input_entry.insert(0, text))
                 self.root.after(0, lambda: self.input_entry.focus_set())
                 print(f"✓ Transcribed: {text}")
-                
             else:
                 self.root.after(0, lambda: self.status_label.config(text="❌ Transcription failed", fg="#ff0000"))
         
         except Exception as e:
             print(f"❌ Transcription error: {e}")
+            import traceback
+            traceback.print_exc()
             self.root.after(0, lambda: self.status_label.config(text="❌ Transcription failed", fg="#ff0000"))
         
         finally:
@@ -494,16 +515,16 @@ class JarvisGUI:
         self.add_message("YOU", user_input)
         self.input_entry.delete(0, tk.END)
         
-        # Use plain Python values (not Tkinter variables)
-        tts_enabled = self._tts_enabled
-        stream_enabled = self._stream_enabled
+        # Get current settings values
+        tts_enabled = self.tts_enabled.get()
+        stream_enabled = self.stream_enabled.get()
         
         # Disable input while processing
         self.input_entry.config(state=tk.DISABLED)
         self.send_button.config(state=tk.DISABLED)
         self.status_label.config(text="🤔 Thinking...", fg="#ffaa00")
         
-        # Process input in background with settings as parameters
+        # Process input in background
         threading.Thread(
             target=self.process_input,
             args=(user_input, tts_enabled, stream_enabled),
@@ -511,14 +532,7 @@ class JarvisGUI:
         ).start()
     
     def process_input(self, user_input, tts_enabled, stream_enabled):
-        """
-        Process user input and get AI response
-        
-        Args:
-            user_input: User's message
-            tts_enabled: TTS setting (passed as value, not variable)
-            stream_enabled: Streaming setting (passed as value, not variable)
-        """
+        """Process user input and get AI response"""
         from jarvis_logic import askAI
         import time
         
@@ -527,36 +541,39 @@ class JarvisGUI:
             
             # Use streaming if enabled
             if stream_enabled:
-                ## Signal start of stream
-                #self.stream_queue.put("__START__")
-                #
-                ## Capture streaming response with delay
-                #def capture_stream(text):
-                #    nonlocal full_response
-                #    full_response += text
-                #    self.stream_callback(text)
-                #    # Add small delay for smooth streaming effect
-                #    time.sleep(0.05)  # 50ms delay between words
+                # Signal start of stream
+                self.stream_queue.put("__START__")
                 
-                # Get response with streaming
-                response = askAI(user_input)
+                # Capture streaming response
+                def capture_stream(text):
+                    nonlocal full_response
+                    full_response += text
+                    self.stream_callback(text)
+                    # Small delay for smooth streaming
+                    time.sleep(0.05)
+                
+                # Get response with streaming (if your askAI supports it)
+                # Note: You'll need to modify askAI to accept a callback
+                response = askAI(user_input, stream_callback=capture_stream)
+                full_response = response if not full_response else full_response
                 
                 # Signal end of stream
-                #self.stream_queue.put("__END__")
+                self.stream_queue.put("__END__")
             else:
                 # Get response without streaming
                 response = askAI(user_input)
                 full_response = response
                 self.root.after(0, lambda r=response: self.add_message("JARVIS", r))
             
-            # TTS (queue it to be spoken in main thread)
-            if tts_enabled and full_response:
+            # Queue TTS (will be spoken in main thread)
+            if tts_enabled and full_response and TTS_ENGINE:
                 self.tts_queue.put(full_response)
         
         except Exception as e:
             import traceback
             error_msg = f"Error: {e}"
-            traceback.print_exc()  # Print full error for debugging
+            print(f"❌ Process error: {error_msg}")
+            traceback.print_exc()
             self.root.after(0, lambda: self.add_message("SYSTEM", error_msg))
         
         finally:
@@ -571,7 +588,18 @@ class JarvisGUI:
         self.root.mainloop()
 
     def on_close(self):
+        """Clean up and close"""
         try:
+            # Stop TTS engine
+            if TTS_ENGINE:
+                try:
+                    TTS_ENGINE.stop()
+                except:
+                    pass
             self.root.destroy()
         except:
             pass
+
+def main():
+    boot =JarvisGUI()
+    boot.run()
